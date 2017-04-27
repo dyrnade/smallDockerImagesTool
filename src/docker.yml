@@ -1,0 +1,22 @@
+---
+# YAML for Docker Image
+
+entryPointScript: entrypoint.sh
+image:
+  name: redis
+  runAsRoot: |
+    "!${stdenv.shell}"
+    "${dockerTools.shadowSetup}"
+    groupadd -r redis
+    useradd -r -g redis -d /data -M redis
+    mkdir /data
+    chown redis:redis /data
+
+  contents: redis
+  config:
+   cmd: redis-server
+   entrypoint: entrypoint
+   ports: "6379/tcp"
+   workingdir: /data
+   volumes: /data
+...
