@@ -101,8 +101,27 @@ useImageConfig = do
 readEntryScriptContent :: FilePath -> IO String
 readEntryScriptContent = readFile
 
---trm :: Config
---trm = "asdsa"
+initConfigFile :: FilePath -> IO ()
+initConfigFile filePath = do
+  let content = unlines [
+       " ---",
+       "# YAML for Docker Image",
+       "\n",
+       "entryPointScript: entrypoint.sh # Entrypoint script you want when container initialized",
+       "image:",
+         "name: #image name",
+         "runAsRoot: | # commands to run as root user ",
+         "\n",
+         "contents: #",
+         "config:",
+          "cmd: #command to run",
+          "entrypoint: entrypoint",
+          "ports: \"\" # ports to use ",
+          "workingdir: # Working Directory",
+          "volumes: # Volumes to be mounted",
+          "..."
+       ]
+  writeFile filePath content
 
 -- initConfigFile :: FilePath -> String -> IO ()
 -- initConfigFile xfilePath bs = do
@@ -184,18 +203,18 @@ main = do
   writeFile tmpDefaultNix defaultNix
   
   let buildCommand = "nix-build " ++ tmpDefaultNix
-  -- initCommand <- initConfigFile (currentDir </> "f.yml") fze
+  let initCommand  = initConfigFile (currentDir </> "f.yml")
   
   args <- SE.getArgs    
   case args of
         ["help"]  -> putStrLn help
         ["build"] -> SP.system buildCommand  >>= SX.exitWith
-        ["init"]  -> putStrLn "tmp"
+        ["init"]  -> initCommand
         _         -> SX.die "Unknown argument"
-  
 -- Help menu items
 help :: String
 help = unlines [
-          "-h     Displays this help menu.",
-          "-b     Builds the docker image."
+          "help     Displays this help menu.",
+          "build    Builds the docker image.",
+          "init     Creates initial configuration(docker.yml)"
       ]
