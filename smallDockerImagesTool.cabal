@@ -21,6 +21,12 @@ executable smallDockerImagesTool
   -- other-modules:
   -- other-extensions:
   build-depends:       base >=4.9 && <4.10,
-                       process >=1.4.3.0
+                       process >=1.4.3.0,
+                       yaml >=0.8.5.3,
+                       aeson >=1.0.2.1,
+                       bytestring,
+                       lens >=4.15.1,
+                       directory >=1.3.1.1,
+                       filepath  >=1.4.1.2
   hs-source-dirs:      src
   default-language:    Haskell2010
