@@ -3,20 +3,18 @@
 
 entryPointScript: entrypoint.sh
 image:
-  name: redis
+  name: redisgere
   runAsRoot: |
-    "!${stdenv.shell}"
-    "${dockerTools.shadowSetup}"
     groupadd -r redis
     useradd -r -g redis -d /data -M redis
     mkdir /data
     chown redis:redis /data
 
-  contents: redis
+  contents: [ redis ]
   config:
    cmd: redis-server
    entrypoint: entrypoint
-   ports: "6379/tcp"
+   ports: [ 6379/tcp ]
    workingdir: /data
-   volumes: /data
+   volumes: [ /data ]
 ...
