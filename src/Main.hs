@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
+
 module Main where
 
 import           Data.Bits
@@ -11,18 +11,10 @@ import qualified System.Environment as SE
 import qualified System.Exit        as SX
 import qualified System.Process     as SP
 import Data.Yaml as Y
-import Data.Yaml.Pretty as YP
-import Control.Lens
 import qualified Data.ByteString as BS
 import Data.Aeson
-import Data.Aeson.TH
 import Data.Aeson.Types
 import Control.Applicative
-import qualified Control.Monad.IO.Class as X
-import Control.Monad
-import Data.Maybe
--- import Ghc.Generics
-
 
 -- Data EntryPoint
 data EntryPointPath = EntryPointPath {
@@ -45,8 +37,7 @@ data ImageConfig = ImageConfig {
   } deriving (Show)
 
 instance FromJSON ImageConfig where
-  parseJSON (Object i) = -- do
-    --i <- o .: "config"
+  parseJSON (Object i) = 
     ImageConfig <$>
      i .:? "cmd" <*>
      i .:? "entrypoint" <*>
@@ -87,12 +78,10 @@ takeEntryPointScript a = case a of
              Nothing -> ""
 
 -- ImageInformation
-
 useImageInformation :: IO ImageInformation
 useImageInformation =
   either (error . show) id <$>
-  Y.decodeFileEither "docker.yml" -- :: IO (Maybe ImageInformation)
-  -- #return (info)
+  Y.decodeFileEither "docker.yml" 
 
 useImageConfig :: IO (ImageConfig)
 useImageConfig = do
@@ -106,54 +95,41 @@ readEntryScriptContent = readFile
 initConfigFile :: FilePath -> IO ()
 initConfigFile filePath = do
   let content = unlines [
-       " ---",
+       "---",
+       "#Extra Documentation",
+       "#NixOS Manual about Docker: https://nixos.org/nixpkgs/manual/#sec-pkgs-dockerTools",
+       "#Docker Image Specification: https://github.com/docker/docker/blob/master/image/spec/v1.md#docker-image-specification-v100",
        "# YAML for Docker Image",
-       "\n",
+       "",
        "entryPointScript: entrypoint.sh # Entrypoint script you want when container initialized",
        "image:",
-         "name: #image name",
-         "runAsRoot: | # commands to run as root user ",
-         "\n",
-         "contents: #",
-         "config:",
-          "cmd: #command to run",
-          "entrypoint: entrypoint",
-          "ports: \"\" # ports to use ",
-          "workingdir: # Working Directory",
-          "volumes: # Volumes to be mounted",
-          "..."
+       "  name: #image name # Only field that is absolute REQUIRED.",
+       "  runAsRoot: | # commands to run as root user ",
+       "    #Item1",
+       "    #Item2",
+       "    #...",
+       "",
+       "  contents: [\"list of items\"]#",
+       "  config:",
+       "    cmd: #command to run",
+       "    entrypoint: entrypoint # if you define entryPointScript, this is required",
+       "    ports: [\"list of items\"] # ports to be used ",
+       "    workingdir: # Working Directory",
+       "    volumes: [\"list of items\"] # Volumes to mount in",
+       "..."
        ]
   writeFile filePath content
+  putStrLn "Initial configuration-file(docker.yml) is created."
 
--- initConfigFile :: FilePath -> String -> IO ()
--- initConfigFile xfilePath bs = do
---   let content = [
---        " ---",
---        "# YAML for Docker Image",
---        "\n",
---        "entryPointScript: entrypoint.sh # Entrypoint script you want when container initialized",
---        "image:",
---          "name: #image name",
---          "runAsRoot: | # commands to run as root user ",
---          "\n",
---          "contents: #",
---          "config:",
---           "cmd: #command to run",
---           "entrypoint: entrypoint",
---           "ports: \"\" # ports to use ",
---           "workingdir: # Working Directory",
---           "volumes: # Volumes to be mounted",
---           "..."
---        ]
---    writeFile xfilePath bs
 main = do
   
   currentDir <- getCurrentDirectory
   epPath <- useEntryPointPath
   let entryScript = takeEntryPointScript epPath
   entryScriptContent <- case epPath of { Nothing -> return "empty"; Just path -> readEntryScriptContent (currentDir </> (entryPointScript path)) }
-
-  let entryf = "let\n  entrypoint = writeScript \"entrypoint.sh\" ''\n    #!${stdenv.shell}\n" ++ (unlines $ map (\e -> "    " ++ e) (lines entryScriptContent)) ++ "  '';\nin"
+  
+  -- | TODO: if entryScriptContent empty then skip this part
+  let entryPoint = "let\n  entrypoint = writeScript \"entrypoint.sh\" ''\n    #!${stdenv.shell}\n" ++ (unlines $ map (\e -> "    " ++ e) (lines entryScriptContent)) ++ "  '';\nin"
   --let fullPathEntryScript = currentDir </> entryScript
   --entryScriptContent <- readEntryScriptContent fullPathEntryScript
 
@@ -177,11 +153,6 @@ main = do
          Nothing -> "empty"
 
   
-       -- configEntryPoint = if entryScript /= ""
-       --   then  case (entrypoint iConfig) of
-       --          Just ep -> "    Entrypoint = [ " ++ ep ++" ];"
-       --          Nothing -> "empty"
-       
        configEntryPoint
           | entryScript /= ""   = case (entrypoint iConfig) of
                                    Just ep -> "    Entrypoint = [ " ++ ep ++" ];"
@@ -208,7 +179,7 @@ main = do
        defaultNix = unlines $ filter (\x -> x /= "empty") [
              "{ pkgs ? import <nixpkgs> {} }:",
              "with pkgs;",
-             entryf,
+             entryPoint,
              "dockerTools.buildImage {",
              "  name = " ++ "\"" ++ iName ++ "\"" ++ ";",
              iRunAsRoot,
@@ -216,12 +187,10 @@ main = do
              iContents,
              "",
              "  config = {",
+
              configCmd,
-             --"    Entrypoint = [ " ++ configEntryPoint ++" ];",
              configEntryPoint,
              configPorts,
-
-             --"    WorkingDir = " ++ "\"" ++ configWorkingDir ++ "\"" ++ ";",
              configWorkingDir,            
              configVolumes,
              
@@ -233,12 +202,8 @@ main = do
   let tmpDefaultNix = tmpDir </> "default.nix"
   writeFile tmpDefaultNix defaultNix
 
-  let
-    extraArgsForBuildCommand :: String -> String
-    extraArgsForBuildCommand a = a
-    --extraArgsForBuildCommand "" = ""
   let buildCommand = "nix-build " ++ tmpDefaultNix 
-  let initCommand  = initConfigFile (currentDir </> "f.yml")
+  let initCommand  = initConfigFile (currentDir </> "docker.yml")
   
   args <- SE.getArgs    
   case args of
@@ -247,12 +212,18 @@ main = do
         ["build"] -> SP.system buildCommand  >>= SX.exitWith
         ["init"]  -> initCommand
         ["print"] -> putStrLn defaultNix
-        ["f"]     -> print $ unlines $ lines entryScriptContent
         _         -> SX.die "Unknown argument"
+
 -- Help menu items
 help :: String
 help = unlines [
-          "help     Displays this help menu.",
-          "build    Builds the docker image.",
-          "init     Creates initial configuration(docker.yml)"
+          "Usage: sdit [OPTION]",
+          "Create DOCKER IMAGE(s) from configuration-file.",
+          "",
+          "\thelp     Displays this help menu.",
+          "\tbuild    Builds the docker image.",
+          "\tinit     Creates initial configuration-file(docker.yml)",
+          "\tprint    Displays created Nix from configuration-file(docker.yml)",
+          "",
+          "Homepage and help: https://github.com/dyrnade/smallDockerImagesTool"
       ]
