@@ -5,7 +5,7 @@ module Main where
 import           Data.Bits
 import           Data.List
 import           System.FilePath
-import           System.Directory (getCurrentDirectory, getTemporaryDirectory)
+import           System.Directory (getCurrentDirectory, getTemporaryDirectory, removeFile)
 import           Data.String
 import qualified System.Environment as SE
 import qualified System.Exit        as SX
@@ -141,7 +141,7 @@ main = do
        iName = name imageInfo
 
        iRunAsRoot = case (runAsRoot imageInfo) of
-         Just rAr -> "  runAsRoot = ''\n    #!${stdenv.shell}\n    ${dockerTools.shadowSetup}\n" ++ (unlines $ map (\r -> "    " ++ r) (lines rAr)) ++ "\n  '';"
+         Just rAr -> "  runAsRoot = ''\n    #!${stdenv.shell}\n    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:$PATH\n    ${dockerTools.shadowSetup}\n" ++ (unlines $ map (\r -> "    " ++ r) (lines rAr)) ++ "\n  '';"
          Nothing  -> "empty"
          
        iContents = case (contents imageInfo) of
@@ -202,14 +202,24 @@ main = do
   let tmpDefaultNix = tmpDir </> "default.nix"
   writeFile tmpDefaultNix defaultNix
 
-  let buildCommand = "nix-build " ++ tmpDefaultNix 
+  let buildCommand = "nix-build " ++ tmpDefaultNix
+  let dockerLoadCommand = "docker load < " ++ currentDir </> "result"
   let initCommand  = initConfigFile (currentDir </> "docker.yml")
   
   args <- SE.getArgs    
   case args of
         ["help"]  -> putStrLn help
         --["build",Just extra] -> SP.system (buildCommand ++ " " ++  fromMaybe extra)  >>= SX.exitWith
-        ["build"] -> SP.system buildCommand  >>= SX.exitWith
+        ["build"] -> do
+          putStrLn "\nNIX-BUILD RELATED EVENTS WILL BE SHOWN...\n"
+          ar <- SP.system buildCommand
+          --SP.waitForProcess
+          if ar == SX.ExitSuccess
+            then do
+            SX.ExitSuccess <- SP.system dockerLoadCommand
+            removeFile (currentDir </> "result")
+            putStrLn ("\nYOUR IMAGE " ++ iName ++ " IS CREATED...")
+            else putStrLn "\nYOUR IMAGE BUILD FAILED..."
         ["init"]  -> initCommand
         ["print"] -> putStrLn defaultNix
         _         -> SX.die "Unknown argument"
