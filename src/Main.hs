@@ -2,19 +2,20 @@
 
 module Main where
 
+import           Control.Applicative
+import           Data.Aeson
+import           Data.Aeson.Types
 import           Data.Bits
+import qualified Data.ByteString     as BS
 import           Data.List
-import           System.FilePath
-import           System.Directory (getCurrentDirectory, getTemporaryDirectory, removeFile)
 import           Data.String
-import qualified System.Environment as SE
-import qualified System.Exit        as SX
-import qualified System.Process     as SP
-import Data.Yaml as Y
-import qualified Data.ByteString as BS
-import Data.Aeson
-import Data.Aeson.Types
-import Control.Applicative
+import           Data.Yaml           as Y
+import           System.Directory    (getCurrentDirectory,
+                                      getTemporaryDirectory, removeFile)
+import qualified System.Environment  as SE
+import qualified System.Exit         as SX
+import           System.FilePath
+import qualified System.Process      as SP
 
 -- Data EntryPoint
 data EntryPointPath = EntryPointPath {
@@ -26,39 +27,39 @@ instance FromJSON EntryPointPath where
          parseJSON (Object e) = EntryPointPath
           <$> e .: "entryPointScript"
          parseJSON invalid    = typeMismatch "EntryPointPath" invalid
-         
+
 -- Data Config
 data ImageConfig = ImageConfig {
-         cmd :: Maybe String,
+         cmd        :: Maybe String,
          entrypoint :: Maybe String,
-         ports :: Maybe [String],
+         ports      :: Maybe [String],
          workingdir :: Maybe String,
-         volumes :: Maybe [String]
+         volumes    :: Maybe [String]
   } deriving (Show)
 
 instance FromJSON ImageConfig where
-  parseJSON (Object i) = 
+  parseJSON (Object i) =
     ImageConfig <$>
      i .:? "cmd" <*>
      i .:? "entrypoint" <*>
      i .:? "ports" <*>
      i .:? "workingdir" <*>
-     i .:? "volumes" 
+     i .:? "volumes"
   parseJSON invalid    = typeMismatch "Config" invalid
-  
+
 -- Data ImageInfo
 data ImageInformation = ImageInformation {
-  name :: String,
+  name      :: String,
   runAsRoot :: Maybe String,
-  contents :: Maybe [String],
-  config :: ImageConfig
+  contents  :: Maybe [String],
+  config    :: ImageConfig
   } deriving (Show)
 
 instance FromJSON ImageInformation where
   parseJSON (Object o) = do
     i <- o .: "image"
     ImageInformation <$>
-     i .: "name" <*>
+     i .: "name"       <*>
      i .:? "runAsRoot" <*>
      i .:? "contents" <*>
      i .: "config"
@@ -74,14 +75,14 @@ useEntryPointPath = do
 
 takeEntryPointScript :: Maybe EntryPointPath -> String
 takeEntryPointScript a = case a of
-             Just b -> entryPointScript b
+             Just b  -> entryPointScript b
              Nothing -> ""
 
 -- ImageInformation
 useImageInformation :: IO ImageInformation
 useImageInformation =
   either (error . show) id <$>
-  Y.decodeFileEither "docker.yml" 
+  Y.decodeFileEither "docker.yml"
 
 useImageConfig :: IO (ImageConfig)
 useImageConfig = do
@@ -119,20 +120,19 @@ initConfigFile filePath = do
        "..."
        ]
   writeFile filePath content
-  putStrLn "Initial configuration-file(docker.yml) is created."
+  putStrLn "Initial configuration-file(docker.yml) is created..."
 
 main = do
-  
+
   currentDir <- getCurrentDirectory
   epPath <- useEntryPointPath
   let entryScript = takeEntryPointScript epPath
   entryScriptContent <- case epPath of { Nothing -> return "empty"; Just path -> readEntryScriptContent (currentDir </> (entryPointScript path)) }
-  
+
   -- | TODO: if entryScriptContent empty then skip this part
   let entryPoint = "let\n  entrypoint = writeScript \"entrypoint.sh\" ''\n    #!${stdenv.shell}\n" ++ (unlines $ map (\e -> "    " ++ e) (lines entryScriptContent)) ++ "  '';\nin"
   --let fullPathEntryScript = currentDir </> entryScript
   --entryScriptContent <- readEntryScriptContent fullPathEntryScript
-
 
   imageInfo <- useImageInformation
 
@@ -143,7 +143,7 @@ main = do
        iRunAsRoot = case (runAsRoot imageInfo) of
          Just rAr -> "  runAsRoot = ''\n    #!${stdenv.shell}\n    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:$PATH\n    ${dockerTools.shadowSetup}\n" ++ (unlines $ map (\r -> "    " ++ r) (lines rAr)) ++ "\n  '';"
          Nothing  -> "empty"
-         
+
        iContents = case (contents imageInfo) of
          Just c  -> "  contents = [ "++ (unwords c) ++ " ];"
          Nothing -> "empty"
@@ -152,7 +152,7 @@ main = do
          Just cm -> "    Cmd = [ "++ "\"" ++ cm ++ "\"" ++ " ];"
          Nothing -> "empty"
 
-  
+
        configEntryPoint
           | entryScript /= ""   = case (entrypoint iConfig) of
                                    Just ep -> "    Entrypoint = [ " ++ ep ++" ];"
@@ -161,10 +161,10 @@ main = do
 
        -- configWorkingDir = workingdir iConfig
        configWorkingDir = case (workingdir iConfig) of
-         Just wDir -> "    WorkingDir = " ++ "\"" ++ wDir ++ "\"" ++ ";"     
-         Nothing   -> "empty"       
+         Just wDir -> "    WorkingDir = " ++ "\"" ++ wDir ++ "\"" ++ ";"
+         Nothing   -> "empty"
 
-       -- If ports are present, add some literals for each     
+       -- If ports are present, add some literals for each
        maybePorts :: Maybe [String] -> String
        maybePorts (Just ports) =  "    ExposedPorts = {\n" ++ (unwords $ map (\port -> "      " ++ port ++ " = {};\n") $ map show ports) ++ "    };"
        maybePorts Nothing = "empty"
@@ -174,7 +174,7 @@ main = do
        maybeVolumes (Just volumes) =  "    Volumes = {\n" ++ (unwords $ map (\volume ->"      " ++  volume ++ " = {};\n") $ map show volumes) ++ "    };"
        maybeVolumes Nothing = "empty"
        configVolumes = maybeVolumes $ volumes iConfig
-       
+
 
        defaultNix = unlines $ filter (\x -> x /= "empty") [
              "{ pkgs ? import <nixpkgs> {} }:",
@@ -191,9 +191,9 @@ main = do
              configCmd,
              configEntryPoint,
              configPorts,
-             configWorkingDir,            
+             configWorkingDir,
              configVolumes,
-             
+
              "  };",
              "}"
             ]
@@ -205,21 +205,24 @@ main = do
   let buildCommand = "nix-build " ++ tmpDefaultNix
   let dockerLoadCommand = "docker load < " ++ currentDir </> "result"
   let initCommand  = initConfigFile (currentDir </> "docker.yml")
-  
-  args <- SE.getArgs    
+  let buildImage :: IO ()
+      buildImage = do
+          putStrLn "\nNIX-BUILD RELATED EVENTS WILL BE SHOWN...\n"
+          buildExitCode <- SP.system $ buildCommand
+          if buildExitCode == SX.ExitSuccess
+            then do
+                 dockerLoadExitCode <- SP.system dockerLoadCommand
+                 if dockerLoadExitCode == SX.ExitSuccess
+                   then do
+                        removeFile (currentDir </> "result")
+                        putStrLn ("\nYOUR IMAGE " ++ iName ++ " IS CREATED...")
+                   else putStrLn "\nYOUR IMAGE BUILD FAILED...\n\nPLEASE BE SURE, You used without sudo... otherwise you can add your user to docker group or use sudo..."
+          else putStrLn "\nYOUR IMAGE BUILD FAILED...\n"
+
+  args <- SE.getArgs
   case args of
         ["help"]  -> putStrLn help
-        --["build",Just extra] -> SP.system (buildCommand ++ " " ++  fromMaybe extra)  >>= SX.exitWith
-        ["build"] -> do
-          putStrLn "\nNIX-BUILD RELATED EVENTS WILL BE SHOWN...\n"
-          ar <- SP.system buildCommand
-          --SP.waitForProcess
-          if ar == SX.ExitSuccess
-            then do
-            SX.ExitSuccess <- SP.system dockerLoadCommand
-            removeFile (currentDir </> "result")
-            putStrLn ("\nYOUR IMAGE " ++ iName ++ " IS CREATED...")
-            else putStrLn "\nYOUR IMAGE BUILD FAILED..."
+        ["build"] -> buildImage
         ["init"]  -> initCommand
         ["print"] -> putStrLn defaultNix
         _         -> SX.die "Unknown argument"
@@ -228,12 +231,10 @@ main = do
 help :: String
 help = unlines [
           "Usage: sdit [OPTION]",
-          "Create DOCKER IMAGE(s) from configuration-file.",
-          "",
-          "\thelp     Displays this help menu.",
-          "\tbuild    Builds the docker image.",
-          "\tinit     Creates initial configuration-file(docker.yml)",
-          "\tprint    Displays created Nix from configuration-file(docker.yml)",
-          "",
+          "Create DOCKER IMAGE(s) from configuration-file.\n",
+          "\thelp              Displays this help menu.",
+          "\tbuild             Builds the docker image.",
+          "\tinit              Creates initial configuration-file(docker.yml)",
+          "\tprint             Displays created Nix from configuration-file(docker.yml)\n",
           "Homepage and help: https://github.com/dyrnade/smallDockerImagesTool"
       ]
