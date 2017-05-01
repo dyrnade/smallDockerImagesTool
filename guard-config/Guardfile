@@ -20,14 +20,14 @@ repl_options =
   ]
 
 guard :haskell, repl_options: repl_options do
-  watch(%r{test/.+Spec\.l?hs$})
+ # watch(%r{test/.+Spec\.l?hs$})
   watch(%r{src/.+\.l?hs$})
-  watch(%r{\.cabal$})
+ # watch(%r{\.cabal$})
 end
 
 # Add files and commands to this file, like the example:
 #   watch(%r{file/path}) { `command(s)` }
 #
 guard :shell do
-  watch(/(.*).hs/) {|m| `ghc #{m[0]}` }
+  watch(%r{src/.+\.l?hs$}) {|m| `/usr/bin/notify-send "Compile is finished"` }
 end
