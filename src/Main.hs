@@ -216,7 +216,7 @@ main = do
                    then do
                         removeFile (currentDir </> "result")
                         putStrLn ("\nYOUR IMAGE " ++ iName ++ " IS CREATED...")
-                   else putStrLn "\nYOUR IMAGE BUILD FAILED...\n\nPLEASE BE SURE, You used without sudo... otherwise you can add your user to docker group or use sudo..."
+                   else putStrLn "\nYOUR IMAGE BUILD FAILED...\n\nPLEASE BE SURE, You used with sudo... otherwise you can add your user to docker group or use sudo..."
           else putStrLn "\nYOUR IMAGE BUILD FAILED...\n"
 
   args <- SE.getArgs
