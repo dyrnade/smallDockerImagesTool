@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE RecordWildCards #-}
 module Main where
 
 import           Control.Applicative
@@ -16,6 +17,7 @@ import qualified System.Environment  as SE
 import qualified System.Exit         as SX
 import           System.FilePath
 import qualified System.Process      as SP
+import Data.Maybe
 
 -- Data EntryPoint
 data EntryPointPath = EntryPointPath {
@@ -84,6 +86,7 @@ useImageInformation =
   either (error . show) id <$>
   Y.decodeFileEither "docker.yml"
 
+-- ImageConfig
 useImageConfig :: IO (ImageConfig)
 useImageConfig = do
   image <- useImageInformation
@@ -124,58 +127,56 @@ initConfigFile filePath = do
 
 main = do
 
+  -- Indentation Functions
+  let
+    addIndentationToEach :: String -> String
+    addIndentationToEach items = unlines $ map ("    " ++) (lines items)
+
+    addIndentationToListItems :: [String] -> String
+    addIndentationToListItems items = unwords $ map (\item -> "      " ++ item ++ " = {};\n") $ map show items
+
   currentDir <- getCurrentDirectory
   epPath <- useEntryPointPath
   let entryScript = takeEntryPointScript epPath
   entryScriptContent <- case epPath of { Nothing -> return "empty"; Just path -> readEntryScriptContent (currentDir </> (entryPointScript path)) }
 
-  -- | TODO: if entryScriptContent empty then skip this part
-  let entryPoint = "let\n  entrypoint = writeScript \"entrypoint.sh\" ''\n    #!${stdenv.shell}\n" ++ (unlines $ map (\e -> "    " ++ e) (lines entryScriptContent)) ++ "  '';\nin"
-  --let fullPathEntryScript = currentDir </> entryScript
-  --entryScriptContent <- readEntryScriptContent fullPathEntryScript
-
   imageInfo <- useImageInformation
 
   let
+       -- Extract ImageConfig Data out of ImageInformation Data
        iConfig = config imageInfo
-       iName = name imageInfo
 
-       iRunAsRoot = case (runAsRoot imageInfo) of
-         Just rAr -> "  runAsRoot = ''\n    #!${stdenv.shell}\n    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:$PATH\n    ${dockerTools.shadowSetup}\n" ++ (unlines $ map (\r -> "    " ++ r) (lines rAr)) ++ "\n  '';"
-         Nothing  -> "empty"
+       iName = name imageInfo -- This is necessary
 
-       iContents = case (contents imageInfo) of
-         Just c  -> "  contents = [ "++ (unwords c) ++ " ];"
-         Nothing -> "empty"
+       -- RunAsRoot part
+       iRunAsRoot = "  runAsRoot = ''\n    #!${stdenv.shell}\n    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:$PATH\n    ${dockerTools.shadowSetup}\n" ++ (maybe "empty" addIndentationToEach (runAsRoot imageInfo))++ "\n  '';"
 
-       configCmd = case (cmd iConfig) of
-         Just cm -> "    Cmd = [ "++ "\"" ++ cm ++ "\"" ++ " ];"
-         Nothing -> "empty"
+       -- Contents
+       iContents = "  contents = [ " ++  (maybe "empty" unwords (contents imageInfo)) ++ " ];"
 
+       -- Adds Cmd of Config part
+       configCmd = "    Cmd = [ "++ "\"" ++ (fromMaybe "empty" (cmd iConfig)) ++ "\"" ++ " ];"
 
+       -- If entryPointScript is present, puts it with ..
        configEntryPoint
-          | entryScript /= ""   = case (entrypoint iConfig) of
-                                   Just ep -> "    Entrypoint = [ " ++ ep ++" ];"
-                                   Nothing -> "empty"
-          | otherwise = ""
+          | entryScript /= ""   = "    Entrypoint = [ " ++ (fromMaybe "empty" (entrypoint iConfig)) ++ " ];"
+          | otherwise    = ""
 
-       -- configWorkingDir = workingdir iConfig
-       configWorkingDir = case (workingdir iConfig) of
-         Just wDir -> "    WorkingDir = " ++ "\"" ++ wDir ++ "\"" ++ ";"
-         Nothing   -> "empty"
+       -- If entryPointScript is present, puts it with ..
+       entryPoint
+          | entryScript /= "" = "let\n  entrypoint = writeScript \"entrypoint.sh\" ''\n    #!${stdenv.shell}\n" ++ addIndentationToEach entryScriptContent ++ "  '';\nin"
+          | otherwise    = ""
 
-       -- If ports are present, add some literals for each
-       maybePorts :: Maybe [String] -> String
-       maybePorts (Just ports) =  "    ExposedPorts = {\n" ++ (unwords $ map (\port -> "      " ++ port ++ " = {};\n") $ map show ports) ++ "    };"
-       maybePorts Nothing = "empty"
-       configPorts = maybePorts $ ports iConfig
+       -- Working Directory
+       configWorkingDir = "    WorkingDir = " ++ "\"" ++ (fromMaybe "empty" (workingdir iConfig)) ++ "\"" ++ ";"
 
-       maybeVolumes :: Maybe [String] -> String
-       maybeVolumes (Just volumes) =  "    Volumes = {\n" ++ (unwords $ map (\volume ->"      " ++  volume ++ " = {};\n") $ map show volumes) ++ "    };"
-       maybeVolumes Nothing = "empty"
-       configVolumes = maybeVolumes $ volumes iConfig
+       -- Port
+       configPorts = "    ExposedPorts = {\n" ++ (maybe "empty" addIndentationToListItems (ports iConfig)) ++ "    };"
 
+       -- Volume
+       configVolumes = "    Volumes = {\n" ++ (maybe "empty" addIndentationToListItems (volumes iConfig)) ++ "    };"
 
+       -- Creates default.nix with above functions result
        defaultNix = unlines $ filter (\x -> x /= "empty") [
              "{ pkgs ? import <nixpkgs> {} }:",
              "with pkgs;",
