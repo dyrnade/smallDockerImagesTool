@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE RecordWildCards #-}
+
 module Main where
 
 import           Control.Applicative
@@ -17,7 +16,7 @@ import qualified System.Environment  as SE
 import qualified System.Exit         as SX
 import           System.FilePath
 import qualified System.Process      as SP
-import Data.Maybe
+import           Data.Maybe
 
 -- Data EntryPoint
 data EntryPointPath = EntryPointPath {
