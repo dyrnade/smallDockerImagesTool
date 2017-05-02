@@ -16,7 +16,7 @@ build-type:          Simple
 extra-source-files:  ChangeLog.md, README.md
 cabal-version:       >=1.10
 
-executable smallDockerImagesTool
+executable sdit
   main-is:             Main.hs
   -- other-modules:
   -- other-extensions:
@@ -26,7 +26,8 @@ executable smallDockerImagesTool
                        aeson >=1.0.2.1,
                        bytestring,
                        lens >=4.15.1,
-                       directory >=1.3.1.1,
-                       filepath  >=1.4.1.2
+                       directory >=1.2.6.2,
+                       filepath  >=1.4.1.0
+                       --errors
   hs-source-dirs:      src
   default-language:    Haskell2010
