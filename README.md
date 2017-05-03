@@ -5,7 +5,7 @@ Smaller Docker Images Tool with the power of Nix Package Manager.
 
 - This tool expects a configuration-file(docker.yml) from user to read and builds image as follow.
 
-**IMPORTANT**: This tools is in very early stage. I have some ideas to make things simple as possible.
+**IMPORTANT**: This tool is in very early stage. I have some ideas to make things simple as possible.
 
 Menu looks like below
 
