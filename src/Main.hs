@@ -54,7 +54,7 @@ data ImageInformation = ImageInformation {
   name      :: String,
   runAsRoot :: Maybe String,
   contents  :: Maybe [String],
-  config    :: ImageConfig
+  config    :: Maybe ImageConfig
   } deriving (Show)
 
 instance FromJSON ImageInformation where
@@ -64,7 +64,7 @@ instance FromJSON ImageInformation where
      i .: "name"       <*>
      i .:? "runAsRoot" <*>
      i .:? "contents" <*>
-     i .: "config"
+     i .:? "config"
   parseJSON invalid    = typeMismatch "ImageInformation" invalid
 
 
@@ -91,10 +91,10 @@ useImageInformation =
        Right imageinformation  -> return $ imageinformation
 
 -- ImageConfig
-useImageConfig :: IO (ImageConfig)
+useImageConfig :: IO (Maybe ImageConfig)
 useImageConfig = do
   image <- useImageInformation
-  let imageConfig = config image
+  let imageConfig = config image  
   return (imageConfig)
 
 readEntryScriptContent :: FilePath -> IO String
@@ -149,7 +149,10 @@ buildImage = do
 
   let
        -- Extract ImageConfig Data out of ImageInformation Data
-       iConfig = config imageInfo
+       tmpConfig = config imageInfo
+       iConfig = case tmpConfig of
+                 Just x -> x
+                 Nothing -> ImageConfig {cmd=Nothing,entrypoint=Nothing,ports=Nothing,workingdir=Nothing,volumes=Nothing}
 
        iName = name imageInfo -- This is necessary
 
