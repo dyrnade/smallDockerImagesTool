@@ -17,16 +17,17 @@ import qualified System.Exit         as SX
 import           System.FilePath
 import qualified System.Process      as SP
 import           Data.Maybe
+import           Control.Exception
 
 -- Data EntryPoint
 data EntryPointPath = EntryPointPath {
- entryPointScript :: String
+ entryPointScript :: Maybe String
   } deriving (Show)
 -- deriveJSON defaultOptions ''EntryPointPath
 
 instance FromJSON EntryPointPath where
          parseJSON (Object e) = EntryPointPath
-          <$> e .: "entryPointScript"
+          <$> e .:? "entryPointScript"
          parseJSON invalid    = typeMismatch "EntryPointPath" invalid
 
 -- Data Config
@@ -69,21 +70,26 @@ instance FromJSON ImageInformation where
 
 -- Data Extraction starts here ^^
 -- EntryPoint
-useEntryPointPath :: IO (Maybe EntryPointPath)
+useEntryPointPath :: IO EntryPointPath
 useEntryPointPath = do
-  results <- Y.decodeFile "docker.yml" :: IO (Maybe EntryPointPath)
-  return (results)
+  results <- Y.decodeFileEither "docker.yml"
+  case results of
+       Left results -> fail $ Y.prettyPrintParseException results
+       Right a -> return $ a
 
-takeEntryPointScript :: Maybe EntryPointPath -> String
-takeEntryPointScript a = case a of
-             Just b  -> entryPointScript b
-             Nothing -> ""
+-- takeEntryPointScript :: IO EntryPointPath -> String
+-- takeEntryPointScript a = case a of
+--              Just b  -> entryPointScript b
+--              Nothing -> ""
 
 -- ImageInformation
 useImageInformation :: IO ImageInformation
 useImageInformation =
-  either (error . show) id <$>
-  Y.decodeFileEither "docker.yml"
+  --getCurrentDirectory </> "docker.yml"
+  do e <- Y.decodeFileEither "docker.yml"
+     case e of
+       Left err -> fail $ Y.prettyPrintParseException err
+       Right a  -> return $ a
 
 -- ImageConfig
 useImageConfig :: IO (ImageConfig)
@@ -136,8 +142,8 @@ main = do
 
   currentDir <- getCurrentDirectory
   epPath <- useEntryPointPath
-  let entryScript = takeEntryPointScript epPath
-  entryScriptContent <- case epPath of { Nothing -> return "empty"; Just path -> readEntryScriptContent (currentDir </> (entryPointScript path)) }
+  let entryScript = entryPointScript epPath
+  entryScriptContent <- case entryScript of { Nothing -> return "empty"; Just path -> readEntryScriptContent (currentDir </> path) }
 
   imageInfo <- useImageInformation
 
@@ -148,35 +154,35 @@ main = do
        iName = name imageInfo -- This is necessary
 
        -- RunAsRoot part
-       iRunAsRoot = "  runAsRoot = ''\n    #!${stdenv.shell}\n    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:$PATH\n    ${dockerTools.shadowSetup}\n" ++ (maybe "empty" addIndentationToEach (runAsRoot imageInfo))++ "\n  '';"
+       iRunAsRoot = case (maybe "empty" addIndentationToEach (runAsRoot imageInfo)) of { "empty" -> ""; rAr -> "  runAsRoot = ''\n    #!${stdenv.shell}\n    export PATH=/bin:/usr/bin:/sbin:/usr/sbin:$PATH\n    ${dockerTools.shadowSetup}\n" ++ rAr ++ "\n  '';" }
 
        -- Contents
-       iContents = "  contents = [ " ++  (maybe "empty" unwords (contents imageInfo)) ++ " ];"
+       iContents = case (maybe "empty" unwords (contents imageInfo)) of { "empty" -> ""; cnt ->"  contents = [ " ++ cnt  ++ " ];" }
 
        -- Adds Cmd of Config part
-       configCmd = "    Cmd = [ "++ "\"" ++ (fromMaybe "empty" (cmd iConfig)) ++ "\"" ++ " ];"
+       configCmd = case (fromMaybe "empty" (cmd iConfig)) of { "empty" -> ""; cMd -> "    Cmd = [ "++ "\"" ++ cMd ++ "\"" ++ " ];" }
 
        -- If entryPointScript is present, puts it with ..
        configEntryPoint
-          | entryScript /= ""   = "    Entrypoint = [ " ++ (fromMaybe "empty" (entrypoint iConfig)) ++ " ];"
+          | entryScript /= Nothing   = "    Entrypoint = [ " ++ (fromMaybe "empty" (entrypoint iConfig)) ++ " ];"
           | otherwise    = ""
 
        -- If entryPointScript is present, puts it with ..
        entryPoint
-          | entryScript /= "" = "let\n  entrypoint = writeScript \"entrypoint.sh\" ''\n    #!${stdenv.shell}\n" ++ addIndentationToEach entryScriptContent ++ "  '';\nin"
+          | entryScript /= Nothing = "let\n  entrypoint = writeScript \"entrypoint.sh\" ''\n    #!${stdenv.shell}\n" ++ addIndentationToEach entryScriptContent ++ "  '';\nin"
           | otherwise    = ""
 
        -- Working Directory
-       configWorkingDir = "    WorkingDir = " ++ "\"" ++ (fromMaybe "empty" (workingdir iConfig)) ++ "\"" ++ ";"
+       configWorkingDir = case (fromMaybe "empty" (workingdir iConfig)) of { "empty" -> ""; wDir -> "    WorkingDir = " ++ "\"" ++ wDir ++ "\"" ++ ";" }
 
        -- Port
-       configPorts = "    ExposedPorts = {\n" ++ (maybe "empty" addIndentationToListItems (ports iConfig)) ++ "    };"
+       configPorts = case (maybe "empty" addIndentationToListItems (ports iConfig)) of { "empty" -> ""; cP -> "    ExposedPorts = {\n" ++ cP ++ "    };" }
 
        -- Volume
-       configVolumes = "    Volumes = {\n" ++ (maybe "empty" addIndentationToListItems (volumes iConfig)) ++ "    };"
+       configVolumes = case (maybe "empty" addIndentationToListItems (volumes iConfig)) of { "empty" -> ""; cV -> "    Volumes = {\n" ++ cV ++ "    };" }
 
        -- Creates default.nix with above functions result
-       defaultNix = unlines $ filter (\x -> x /= "empty") [
+       defaultNix = unlines [
              "{ pkgs ? import <nixpkgs> {} }:",
              "with pkgs;",
              entryPoint,
