@@ -16,7 +16,6 @@ Create DOCKER IMAGE(s) from configuration-file.
     help              Displays this help menu.
     build             Builds the docker image.
     init              Creates initial configuration-file(docker.yml)
-    print             Displays created Nix from configuration-file(docker.yml)
 
 Homepage and help: https://github.com/dyrnade/smallDockerImagesTool
 
