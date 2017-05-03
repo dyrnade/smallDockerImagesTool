@@ -72,10 +72,10 @@ instance FromJSON ImageInformation where
 -- EntryPoint
 useEntryPointPath :: IO EntryPointPath
 useEntryPointPath = do
-  results <- Y.decodeFileEither "docker.yml"
-  case results of
-       Left results -> fail $ Y.prettyPrintParseException results
-       Right a -> return $ a
+  result <- Y.decodeFileEither "docker.yml"
+  case result of
+       Left err -> fail $ Y.prettyPrintParseException err
+       Right entrypoint -> return $ entrypoint
 
 -- takeEntryPointScript :: IO EntryPointPath -> String
 -- takeEntryPointScript a = case a of
@@ -85,11 +85,10 @@ useEntryPointPath = do
 -- ImageInformation
 useImageInformation :: IO ImageInformation
 useImageInformation =
-  --getCurrentDirectory </> "docker.yml"
-  do e <- Y.decodeFileEither "docker.yml"
-     case e of
+  do result <- Y.decodeFileEither "docker.yml"
+     case result of
        Left err -> fail $ Y.prettyPrintParseException err
-       Right a  -> return $ a
+       Right imageinformation  -> return $ imageinformation
 
 -- ImageConfig
 useImageConfig :: IO (ImageConfig)
