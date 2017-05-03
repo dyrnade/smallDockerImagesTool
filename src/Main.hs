@@ -129,7 +129,8 @@ initConfigFile filePath = do
   writeFile filePath content
   putStrLn "Initial configuration-file(docker.yml) is created..."
 
-main = do
+buildImage :: IO ()
+buildImage = do
 
   -- Indentation Functions
   let
@@ -209,28 +210,29 @@ main = do
 
   let buildCommand = "nix-build " ++ tmpDefaultNix
   let dockerLoadCommand = "docker load < " ++ currentDir </> "result"
-  let initCommand  = initConfigFile (currentDir </> "docker.yml")
-  let buildImage :: IO ()
-      buildImage = do
-          putStrLn "\nNIX-BUILD RELATED EVENTS WILL BE SHOWN...\n"
-          buildExitCode <- SP.system $ buildCommand
-          if buildExitCode == SX.ExitSuccess
-            then do
-                 dockerLoadExitCode <- SP.system dockerLoadCommand
-                 if dockerLoadExitCode == SX.ExitSuccess
-                   then do
-                        removeFile (currentDir </> "result")
-                        putStrLn ("\nYOUR IMAGE " ++ iName ++ " IS CREATED...")
-                   else putStrLn "\nYOUR IMAGE BUILD FAILED...\n\nPLEASE BE SURE, You used with sudo... otherwise you can add your user to docker group or use sudo..."
-          else putStrLn "\nYOUR IMAGE BUILD FAILED...\n"
 
+  putStrLn "\nNIX-BUILD RELATED EVENTS WILL BE SHOWN...\n"
+  buildExitCode <- SP.system $ buildCommand
+  if buildExitCode == SX.ExitSuccess
+    then do
+         dockerLoadExitCode <- SP.system dockerLoadCommand
+         if dockerLoadExitCode == SX.ExitSuccess
+           then do
+                removeFile (currentDir </> "result")
+                putStrLn ("\nYOUR IMAGE " ++ iName ++ " IS CREATED...")
+           else putStrLn "\nYOUR IMAGE BUILD FAILED...\n\nPLEASE BE SURE, You used with sudo... otherwise you can add your user to docker group or use sudo..."
+  else putStrLn "\nYOUR IMAGE BUILD FAILED...\n"
+  removeFile tmpDefaultNix
+
+main :: IO ()
+main = do
+  currentDir <- getCurrentDirectory
   args <- SE.getArgs
   case args of
         ["help"]  -> putStrLn help
         ["build"] -> buildImage
-        ["init"]  -> initCommand
-        ["print"] -> putStrLn defaultNix
-        _         -> SX.die "Unknown argument"
+        ["init"]  -> initConfigFile (currentDir </> "docker.yml")
+        _         -> SX.die "Unknown command. Please use \"sdit help\" to see available commands."
 
 -- Help menu items
 help :: String
@@ -239,7 +241,6 @@ help = unlines [
           "Create DOCKER IMAGE(s) from configuration-file.\n",
           "\thelp              Displays this help menu.",
           "\tbuild             Builds the docker image.",
-          "\tinit              Creates initial configuration-file(docker.yml)",
-          "\tprint             Displays created Nix from configuration-file(docker.yml)\n",
+          "\tinit              Creates initial configuration-file(docker.yml)\n",
           "Homepage and help: https://github.com/dyrnade/smallDockerImagesTool"
       ]
